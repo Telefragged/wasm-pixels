@@ -1,0 +1,14 @@
+{
+    "compilerOptions": {
+        "module": "esnext", // needed to have dynamic imports
+        "lib": [
+            "dom",
+            "es2015"
+        ],
+        
+    },
+    "files": [
+        "./index.ts",
+        "./bootstrap.ts"
+    ]
+}
