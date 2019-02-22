@@ -6,12 +6,12 @@ use std::ops::*;
 
 #[derive(Copy, Clone)]
 struct Vec2d {
-    x: f64,
-    y: f64
+    x: f32,
+    y: f32
 }
 
 impl Vec2d {
-    pub fn length(&self) -> f64 {
+    pub fn length(&self) -> f32 {
         (self.x * self.x + self.y * self.y).sqrt()
     }
 
@@ -29,10 +29,18 @@ impl Add for Vec2d {
     }
 }
 
-impl Mul<f64> for Vec2d {
+impl Sub for Vec2d {
     type Output = Vec2d;
 
-    fn mul(self, scalar: f64) -> Vec2d {
+    fn sub(self, other: Vec2d) -> Vec2d {
+        Vec2d { x: self.x - other.x, y: self.y - other.y }
+    }
+}
+
+impl Mul<f32> for Vec2d {
+    type Output = Vec2d;
+
+    fn mul(self, scalar: f32) -> Vec2d {
         Vec2d {x: self.x * scalar, y: self.y * scalar}
     }
 }
@@ -44,7 +52,7 @@ pub struct Dot {
 }
 
 impl Dot {
-    pub fn tick(&self, time_delta: f64, width: f64, height: f64) -> Dot {
+    pub fn tick(&self, time_delta: f32, width: f32, height: f32) -> Dot {
         let mut pos = self.pos + (self.dir * time_delta);
 
         if self.pos.x < 0.0 {
@@ -63,8 +71,26 @@ impl Dot {
             pos.x = (pos.x - width / 2.0) * -1.0 + (width / 2.0);
         }
 
-        Dot {pos: pos, dir: self.dir}
+        let friction_coefficient = 0.025;
+        let constant_friction = 0.005;
+
+        let length = self.dir.length();
+
+        let desired_length = length * (1.0 - friction_coefficient * time_delta) - constant_friction;
+
+        let new_dir = if desired_length > 0.0 {
+            self.dir * (desired_length / length)
+        } else {
+            Vec2d {x: 0.0, y: 0.0}
+        };
+
+        Dot {pos: pos, dir: new_dir}
     }
+}
+
+struct MouseEvent {
+    position: Vec2d,
+    radius: f32
 }
 
 #[wasm_bindgen]
@@ -72,20 +98,41 @@ pub struct Universe {
     width: u32,
     height: u32,
     dots: Vec<Dot>,
-    points: Vec<f64>
+    pending_events: Vec<MouseEvent>
+}
+
+fn random_f32() -> f32 {
+    js_sys::Math::random() as f32
 }
 
 #[wasm_bindgen]
 impl Universe {
+    fn handle_events(&mut self) {
+        let interpolate = |min: f32, max: f32, factor: f32| (min) + (max - min) * factor.powi(3);
 
-    pub fn tick(&mut self, time_delta: f64) {
-        let new_dots : Vec<Dot> = self.dots.iter().map(|dot| dot.tick(time_delta, self.width() as f64, self.height() as f64)).collect();
+        match self.pending_events.pop() {   
+            Some(event) => {
+                self.dots = self.dots.iter().map(|dot| {
+                    let dir = (dot.pos - event.position).normalized();
+                    let dist = (dot.pos - event.position).length();
+                    if dist >= event.radius {
+                        dot.clone()
+                    } else {
+                        Dot {pos: dot.pos, dir: dot.dir + (dir * interpolate(0.0, 5.0, 1.0 - dist / event.radius))}
+                    }
+                    }).collect();
+                self.handle_events()
+            },
+            None => ()
+        }
+    }
+
+    pub fn tick(&mut self, time_delta: f32) {
+        self.handle_events();
+
+        let new_dots : Vec<Dot> = self.dots.iter().map(|dot| dot.tick(time_delta, self.width() as f32, self.height() as f32)).collect();
 
         self.dots = new_dots;
-
-        let new_points : Vec<f64> = self.dots.iter().fold(Vec::with_capacity(self.dots.len() * 2), |mut acc, dot| {acc.push(dot.pos.x); acc.push(dot.pos.y); acc});
-
-        self.points = new_points;
     }
 
     pub fn new(width: u32, height: u32, num_dots: u32) -> Universe {
@@ -95,22 +142,22 @@ impl Universe {
         let mut dots = Vec::with_capacity(size);
 
         let random_vec = || {
-            Vec2d{x: js_sys::Math::random() * width as f64, y: js_sys::Math::random() * height as f64 }
+            Vec2d{x: random_f32() * width as f32, y: random_f32() * height as f32 }
         };
 
         for _ in 0..num_dots {
-            let dir = (random_vec() * (js_sys::Math::random() * 2.0 - 1.0)).normalized() * js_sys::Math::random() * 5.0;
+            let dir = (random_vec() * (random_f32() * 2.0 - 1.0)).normalized() * random_f32() * 10.0;
 
             dots.push(Dot{pos: random_vec(), dir: dir});
         }
 
-        let points : Vec<f64> = dots.iter().fold(Vec::with_capacity(dots.len() * 2), |mut acc, dot| {acc.push(dot.pos.x); acc.push(dot.pos.y); acc});
+        let pending_events = Vec::new();
 
         Universe {
             width,
             height,
             dots,
-            points
+            pending_events
         }
     }
 
@@ -122,7 +169,12 @@ impl Universe {
         self.height
     }
 
-    pub fn dots(&self) -> *const f64 {
-        self.points.as_ptr()
+    pub fn add_event(& mut self, x: f32, y: f32, radius: f32)
+    {
+        self.pending_events.push(MouseEvent {position: Vec2d {x, y}, radius})
+    }
+
+    pub fn dots(&self) -> *const Dot {
+        self.dots.as_ptr()
     }
 }
