@@ -1,15 +1,16 @@
 import { Universe } from '../pkg/wasm_pixels'
 import { memory } from '../pkg/wasm_pixels_bg';
 
-const num_dots = 10000;
+const num_dots = 100000;
 
-let universe = Universe.new(800, 800, num_dots);
+const width = 500;
+const height = 500;
 
-// Give the canvas room for all of our cells and a 1px border
-// around each of them.
+let universe = Universe.new(width, height, num_dots);
+
 const canvas = document.getElementById('game-of-life-canvas') as HTMLCanvasElement;
-canvas.height = 800;
-canvas.width = 800;
+canvas.width = width;
+canvas.height = height;
 
 canvas.onclick = event => {
     universe.add_event(event.offsetX, event.offsetY, 100);
@@ -20,25 +21,27 @@ document.onkeypress = event => {
     switch (event.key) {
         case 'r':
             universe.free();
-            universe = Universe.new(800, 800, num_dots)
+            universe = Universe.new(width, height, num_dots)
             break;
+        case 'a':
+            universe.tick(10.0);
     }
 }
 
 const ctx = canvas.getContext('2d');
 
+ctx.imageSmoothingEnabled = false;
+
+
 const drawDots = () => {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    universe.render_image_data();
 
-    const dotsPtr = universe.dots();
-    const dots = new Float32Array(memory.buffer, dotsPtr, num_dots * 2)
+    const imagePtr = universe.image_data();
+    const imageArray = new Uint8ClampedArray(memory.buffer, imagePtr, width * height * 4);
+    
+    const imageData = new ImageData(imageArray, width, height);
 
-    for (let i = 0; i < num_dots; i++) {
-        const x = dots[i * 4];
-        const y = dots[i * 4 + 1];
-
-        ctx.fillRect(x-1,y-1,3,3);
-    }
+    ctx.putImageData(imageData, 0, 0);
 };
 
 let prevTime = Date.now();
@@ -51,13 +54,17 @@ const renderLoop = () => {
 
     prevTime = now;
 
-    universe.tick(timeDelta / 100);
+    universe.tick(timeDelta / 1000);
 
-    // drawGrid();
+    const tickTime = Date.now();
+
     drawDots();
+
+    const drawTime = Date.now();
+
+    console.log(tickTime - now, drawTime - tickTime);
 
     requestAnimationFrame(renderLoop);
 };
 
-drawDots();
 requestAnimationFrame(renderLoop);
