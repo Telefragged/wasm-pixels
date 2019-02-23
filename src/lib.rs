@@ -301,4 +301,8 @@ impl Universe {
     pub fn image_data(&self) -> *const u8 {
         self.image_data.as_ptr()
     }
+
+    pub fn remaining_dots(&self) -> usize {
+        self.dots.len()
+    }
 }

@@ -27,6 +27,8 @@ resetGameButton.onclick = _ => {
     universe = Universe.new(width, height, Math.max(numberOfDotsInput.valueAsNumber, 1))
 }
 
+const remainingDotsLabel = document.getElementById('remaining-dots') as HTMLParagraphElement
+
 const ctx = canvas.getContext('2d');
 
 ctx.imageSmoothingEnabled = false;
@@ -54,11 +56,9 @@ const renderLoop = () => {
 
     universe.tick(timeDelta / 1000);
 
-    const tickTime = Date.now();
-
     drawDots();
 
-    const drawTime = Date.now();
+    remainingDotsLabel.textContent = String(universe.remaining_dots());
 
     requestAnimationFrame(renderLoop);
 };
