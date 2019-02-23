@@ -4,6 +4,11 @@ extern crate wasm_bindgen;
 use std::ops::*;
 use wasm_bindgen::prelude::*;
 
+const MAX_DETONATE_TIME: f32 = 10.0;
+const MIN_DETONATE_TIME: f32 = 3.0;
+
+const MAX_EVENTS_PER_TICK: usize = 10;
+
 #[derive(Copy, Clone)]
 struct Vec2d {
     x: f32,
@@ -62,17 +67,33 @@ impl Mul<f32> for Vec2d {
 }
 
 #[derive(Clone, Copy)]
-pub struct Dot {
+enum State {
+    Idle,
+    Detonating(f32)
+}
+
+#[derive(Clone, Copy)]
+struct Dot {
     pos: Vec2d,
     dir: Vec2d,
+    state: State
 }
 
 impl Dot {
     pub fn tick(&self, time_delta: f32, width: f32, height: f32) -> Dot {
         let length = self.dir.length();
 
+        let new_state = match self.state {
+            State::Idle => State::Idle,
+            State::Detonating(t) => State::Detonating(t - time_delta)
+        };
+
         if length == 0.0 {
-            self.clone()
+            Dot {
+                pos: self.pos,
+                dir: self.dir,
+                state: new_state
+            }
         } else {
             let mut pos = self.pos + (self.dir * time_delta);
 
@@ -105,6 +126,7 @@ impl Dot {
             Dot {
                 pos: pos,
                 dir: new_dir,
+                state: new_state
             }
         }
     }
@@ -129,38 +151,43 @@ fn random_f32() -> f32 {
 }
 
 #[wasm_bindgen]
-extern "C" {
-    #[wasm_bindgen(js_namespace = console)]
-    fn log(s: &str);
-}
-
-#[wasm_bindgen]
 impl Universe {
-    fn handle_events(&mut self) {
-        let interpolate = |min: f32, max: f32, factor: f32| (min) + (max - min) * factor.powi(2);
+    fn handle_events(&mut self, depth: usize) {
+        let interpolate = |min: f32, max: f32, factor: f32| min + (max - min) * factor.powi(2);
 
-        match self.pending_events.pop() {
-            Some(event) => {
+        match (self.pending_events.pop(), depth < MAX_EVENTS_PER_TICK) {
+            (Some(event), true) => {
                 self.dots =
                     self.dots
                     .iter()
                     .map(|dot| {
+                        if (dot.pos.x - event.position.x).abs() > event.radius && (dot.pos.y - event.position.y).abs() > event.radius {
+                            return dot.clone();
+                        }
+
                         let dir = (dot.pos - event.position).normalized();
                         let dist = (dot.pos - event.position).length();
+
                         if dist >= event.radius {
                             dot.clone()
                         } else {
+                            let new_state = match dot.state {
+                                State::Idle => State::Detonating( random_f32() * (MAX_DETONATE_TIME - MIN_DETONATE_TIME) + MIN_DETONATE_TIME),
+                                State::Detonating(t) => State::Detonating(t)
+                            };
+
                             Dot {
                                 pos: dot.pos,
                                 dir: dot.dir
                                     + (dir * interpolate(0.0, 50.0, 1.0 - dist / event.radius)),
+                                state: new_state
                             }
                         }
                     })
                     .collect();
-                self.handle_events()
+                self.handle_events(depth + 1)
             }
-            None => (),
+            _ => ()
         }
     }
 
@@ -176,24 +203,51 @@ impl Universe {
         for dot in &self.dots {
             let first_index = get_red_index(dot.pos.x as usize, dot.pos.y as usize);
 
-            if first_index > self.image_data.len() {
-                log(&format!("{}, {}", dot.pos.x, dot.pos.y));
-            } else {
+            let interpolate = |min: f32, max: f32, factor: f32| min + (max - min) * (1.0 - factor).max(0.0).min(1.0);
+
+            if first_index <= self.image_data.len() {
+                let red = match dot.state {
+                    State::Detonating(t) => interpolate(0.0, 255.0, t / MAX_DETONATE_TIME) as u8,
+                    _ => 0
+                };
+
+                self.image_data[first_index] = red;
+
                 self.image_data[first_index + 3] = 255;
             }
         }
     }
 
     pub fn tick(&mut self, time_delta: f32) {
-        self.handle_events();
+
+        let only_alive = |dot : &&Dot| {
+            match dot.state {
+                State::Detonating(t) => t > 0.0,
+                _ => true
+            }
+        };
+
+        let only_dead = |dot : &&Dot| !only_alive(dot);
+
+        let mut new_events : Vec<MouseEvent> = self
+            .dots
+            .iter()
+            .filter(only_dead)
+            .map(|dot| MouseEvent {position: dot.pos, radius: 10.0})
+            .collect();
+
+        self.pending_events.append(&mut new_events);
 
         let new_dots: Vec<Dot> = self
             .dots
             .iter()
+            .filter(only_alive)
             .map(|dot| dot.tick(time_delta, self.width() as f32, self.height() as f32))
             .collect();
 
         self.dots = new_dots;
+
+        self.handle_events(0);
     }
 
     pub fn new(width: u32, height: u32, num_dots: u32) -> Universe {
@@ -207,12 +261,12 @@ impl Universe {
         };
 
         for _ in 0..num_dots {
-            let dir =
-                (random_vec() * (random_f32() * 2.0 - 1.0)).normalized() * random_f32() * 10.0;
+            let dir = Vec2d {x: 0.0, y: 0.0};
 
             dots.push(Dot {
                 pos: random_vec(),
                 dir: dir,
+                state: State::Idle
             });
         }
 

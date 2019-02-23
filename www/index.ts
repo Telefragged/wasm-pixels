@@ -3,8 +3,8 @@ import { memory } from '../pkg/wasm_pixels_bg';
 
 const num_dots = 100000;
 
-const width = 900;
-const height = 900;
+const width = 600;
+const height = 600;
 
 let universe = Universe.new(width, height, num_dots);
 
@@ -13,7 +13,7 @@ canvas.width = width;
 canvas.height = height;
 
 canvas.onclick = event => {
-    universe.add_event(event.offsetX, event.offsetY, 100);
+    universe.add_event(event.offsetX, event.offsetY, 10);
 }
 
 const numberOfDotsInput = document.getElementById('number-of-dots-input') as HTMLInputElement;
@@ -30,7 +30,6 @@ resetGameButton.onclick = _ => {
 const ctx = canvas.getContext('2d');
 
 ctx.imageSmoothingEnabled = false;
-
 
 const drawDots = () => {
     universe.render_image_data();
