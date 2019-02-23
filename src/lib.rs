@@ -69,7 +69,7 @@ impl Mul<f32> for Vec2d {
 #[derive(Clone, Copy)]
 enum State {
     Idle,
-    Detonating(f32)
+    Detonating(f32, f32)
 }
 
 #[derive(Clone, Copy)]
@@ -85,7 +85,7 @@ impl Dot {
 
         let new_state = match self.state {
             State::Idle => State::Idle,
-            State::Detonating(t) => State::Detonating(t - time_delta)
+            State::Detonating(t, max_t) => State::Detonating(t - time_delta, max_t)
         };
 
         if length == 0.0 {
@@ -172,8 +172,11 @@ impl Universe {
                             dot.clone()
                         } else {
                             let new_state = match dot.state {
-                                State::Idle => State::Detonating( random_f32() * (MAX_DETONATE_TIME - MIN_DETONATE_TIME) + MIN_DETONATE_TIME),
-                                State::Detonating(t) => State::Detonating(t)
+                                State::Idle => {
+                                    let time_until_detonation = random_f32() * (MAX_DETONATE_TIME - MIN_DETONATE_TIME) + MIN_DETONATE_TIME;
+                                    State::Detonating( time_until_detonation, time_until_detonation)
+                                },
+                                State::Detonating(t, max_t) => State::Detonating(t, max_t)
                             };
 
                             Dot {
@@ -207,7 +210,7 @@ impl Universe {
 
             if first_index <= self.image_data.len() {
                 let red = match dot.state {
-                    State::Detonating(t) => interpolate(0.0, 255.0, t / MAX_DETONATE_TIME) as u8,
+                    State::Detonating(t, max_t) => interpolate(0.0, 255.0, t / max_t) as u8,
                     _ => 0
                 };
 
@@ -222,7 +225,7 @@ impl Universe {
 
         let only_alive = |dot : &&Dot| {
             match dot.state {
-                State::Detonating(t) => t > 0.0,
+                State::Detonating(t, _) => t > 0.0,
                 _ => true
             }
         };
