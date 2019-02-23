@@ -7,7 +7,11 @@ use wasm_bindgen::prelude::*;
 const MAX_DETONATE_TIME: f32 = 10.0;
 const MIN_DETONATE_TIME: f32 = 3.0;
 
-const MAX_EVENTS_PER_TICK: usize = 10;
+const EXPLOSION_RADIUS: f32 = 10.0;
+
+const GRID_SIZE: usize = 10;
+
+const MAX_EVENTS_PER_TICK: usize = 100;
 
 #[derive(Copy, Clone)]
 struct Vec2d {
@@ -98,13 +102,13 @@ impl Dot {
             let mut pos = self.pos + (self.dir * time_delta);
 
             if pos.x < 0.0 {
-                pos.x += width;
+                pos.x += width - 1.0;
             } else if pos.x >= width {
                 pos.x -= width;
             }
 
             if pos.y < 0.0 {
-                pos.y += height;
+                pos.y += height - 1.0;
             } else if pos.y >= height {
                 pos.y -= height;
             }
@@ -144,6 +148,10 @@ pub struct Universe {
     dots: Vec<Dot>,
     pending_events: Vec<ForceEvent>,
     image_data: Vec<u8>,
+    grid_width: usize,
+    grid_height: usize,
+    grid_columns: usize,
+    grid_cells: Vec<Vec<usize>>
 }
 
 fn random_f32() -> f32 {
@@ -151,43 +159,85 @@ fn random_f32() -> f32 {
 }
 
 #[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(js_namespace = console, js_name = log)]
+    fn log_usize(a: usize);
+
+    #[wasm_bindgen(js_namespace = console, js_name = log)]
+    fn log_f32_f32(a: f32, b: f32);
+}
+
+#[wasm_bindgen]
 impl Universe {
+    fn get_grid_index(&self, position: Vec2d) -> usize {
+        let column = position.x as usize / self.grid_width;
+        let row = position.y as usize / self.grid_height;
+
+        column + row * self.grid_columns
+    }
+
+    fn get_all_grid_indices(&self, top_left: Vec2d, bottom_right: Vec2d) -> Vec<usize> {
+        let mut ret: Vec<usize> = Vec::new();
+
+        let first_column = top_left.x.max(0.0) as usize / self.grid_width;
+        let first_row = top_left.y.max(0.0) as usize / self.grid_height;
+
+        let last_column = bottom_right.x.min((self.width() - 1) as f32) as usize / self.grid_width;
+        let last_row = bottom_right.y.min((self.height() - 1) as f32) as usize / self.grid_height;
+
+        for col in first_column..=last_column {
+            for row in first_row..=last_row {
+                ret.push(col + row * self.grid_columns);
+            }
+        }
+
+        ret
+    }
+
     fn handle_events(&mut self, depth: usize) {
         let interpolate = |min: f32, max: f32, factor: f32| min + (max - min) * factor.powi(2);
 
         match (self.pending_events.pop(), depth < MAX_EVENTS_PER_TICK) {
             (Some(event), true) => {
-                self.dots =
-                    self.dots
-                    .iter()
-                    .map(|dot| {
-                        if (dot.pos.x - event.position.x).abs() > event.radius && (dot.pos.y - event.position.y).abs() > event.radius {
-                            return dot.clone();
-                        }
+                let top_left = Vec2d {x: event.position.x - event.radius, y: event.position.y - event.radius };
+                let bottom_right = Vec2d {x: event.position.x + event.radius, y: event.position.y + event.radius };
 
-                        let dir = (dot.pos - event.position).normalized();
-                        let dist = (dot.pos - event.position).length();
+                let grid_indices = self.get_all_grid_indices(top_left, bottom_right);
 
-                        if dist >= event.radius {
-                            dot.clone()
-                        } else {
-                            let new_state = match dot.state {
-                                State::Idle => {
-                                    let time_until_detonation = random_f32() * (MAX_DETONATE_TIME - MIN_DETONATE_TIME) + MIN_DETONATE_TIME;
-                                    State::Detonating( time_until_detonation, time_until_detonation)
-                                },
-                                State::Detonating(t, max_t) => State::Detonating(t, max_t)
-                            };
+                let mut dot_indices: Vec<usize> = grid_indices.iter().map(|index| self.grid_cells[index.clone()].clone()).flatten().collect();
 
-                            Dot {
-                                pos: dot.pos,
-                                dir: dot.dir
-                                    + (dir * interpolate(0.0, 50.0, 1.0 - dist / event.radius)),
-                                state: new_state
-                            }
-                        }
-                    })
-                    .collect();
+                for index in dot_indices {
+                    let dot = self.dots[index];
+
+                    if (dot.pos.x - event.position.x).abs() > event.radius && (dot.pos.y - event.position.y).abs() > event.radius {
+                        continue;
+                    }
+
+                    let dir = (dot.pos - event.position).normalized();
+                    let dist = (dot.pos - event.position).length();
+
+                    if dist >= event.radius {
+                        continue;
+                    } else {
+                        let new_state = match dot.state {
+                            State::Idle => {
+                                let time_until_detonation = random_f32() * (MAX_DETONATE_TIME - MIN_DETONATE_TIME) + MIN_DETONATE_TIME;
+                                State::Detonating( time_until_detonation, time_until_detonation)
+                            },
+                            State::Detonating(t, max_t) => State::Detonating(t, max_t)
+                        };
+
+                        let dot = Dot {
+                            pos: dot.pos,
+                            dir: dot.dir
+                                + (dir * interpolate(0.0, 50.0, 1.0 - dist / event.radius)),
+                            state: new_state
+                        };
+
+                        self.dots[index] = dot;
+                    }
+                }
+
                 self.handle_events(depth + 1)
             }
             _ => ()
@@ -196,6 +246,7 @@ impl Universe {
 
     pub fn render_image_data(&mut self) {
         for x in (0..self.image_data.len()).step_by(4) {
+            self.image_data[x] = 0;
             self.image_data[x + 3] = 0;
         }
 
@@ -236,7 +287,7 @@ impl Universe {
             .dots
             .iter()
             .filter(only_dead)
-            .map(|dot| ForceEvent {position: dot.pos, radius: 10.0})
+            .map(|dot| ForceEvent {position: dot.pos, radius: EXPLOSION_RADIUS})
             .collect();
 
         self.pending_events.extend(new_events);
@@ -250,27 +301,53 @@ impl Universe {
 
         self.dots = new_dots;
 
+        for grid in self.grid_cells.iter_mut() {
+            grid.clear();
+        }
+
+        for (i, dot) in self.dots.iter().enumerate() {
+            let index = self.get_grid_index(dot.pos);
+
+            self.grid_cells[index].push(i);
+        }
+
         self.handle_events(0);
     }
 
-    pub fn new(width: u32, height: u32, num_dots: u32) -> Universe {
-        let size = (width * height) as usize;
+    pub fn new(width: u32, height: u32, num_dots: usize) -> Universe {
+        let grid_columns = width as usize / GRID_SIZE as usize;
+        let grid_rows = height as usize / GRID_SIZE as usize;
 
-        let mut dots = Vec::with_capacity(size);
+        let num_grids = grid_columns * grid_rows;
+
+        let grid_width: usize = GRID_SIZE as usize;
+        let grid_height: usize = GRID_SIZE as usize;
+
+        let mut grid_cells: Vec<Vec<usize>> = vec![Vec::with_capacity((num_dots as usize / num_grids) * 2); num_grids];
+
+        let mut dots = Vec::with_capacity(num_dots);
 
         let random_vec = || Vec2d {
             x: random_f32() * width as f32,
             y: random_f32() * height as f32,
         };
 
-        for _ in 0..num_dots {
-            let dir = Vec2d {x: 0.0, y: 0.0};
+        for i in 0..num_dots {
+            let pos = random_vec();
 
+            let dir = Vec2d {x: 0.0, y: 0.0};
             dots.push(Dot {
-                pos: random_vec(),
+                pos: pos,
                 dir: dir,
                 state: State::Idle
             });
+
+            let column = pos.x as usize / grid_width;
+            let row = pos.y as usize / grid_height;
+
+            let grid_index = column + row * grid_columns;
+
+            grid_cells[grid_index].push(i);
         }
 
         let pending_events: Vec<ForceEvent> = Vec::new();
@@ -283,6 +360,10 @@ impl Universe {
             dots,
             pending_events,
             image_data,
+            grid_width,
+            grid_height,
+            grid_columns,
+            grid_cells
         }
     }
 
