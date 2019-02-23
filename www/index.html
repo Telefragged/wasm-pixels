@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
-  <head>
+
+<head>
     <meta charset="utf-8">
     <title>Hello wasm-pack!</title>
     <style>
@@ -16,9 +17,13 @@
             justify-content: center;
         }
     </style>
-  </head>
-  <body>
-        <canvas id="game-of-life-canvas"></canvas>
+</head>
+
+<body>
+    <canvas id="game-canvas"></canvas>
     <script src="./bootstrap.js"></script>
-  </body>
+    <input type="number" step=1000 id="number-of-dots-input"/>
+    <button id="reset-game-button">Reset</button>
+</body>
+
 </html>

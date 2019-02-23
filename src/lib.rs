@@ -91,7 +91,7 @@ impl Dot {
             let friction_coefficient = 0.35;
             let constant_friction = 0.1;
 
-            let wind = (Vec2d { x: 1.0, y: 0.3 }).with_len(3.0) * time_delta;
+            // let wind = (Vec2d { x: 1.0, y: 0.3 }).with_len(3.0) * time_delta;
 
             let desired_length = length * (1.0 - friction_coefficient * time_delta)
                 - (constant_friction * time_delta);
@@ -101,8 +101,6 @@ impl Dot {
             } else {
                 Vec2d { x: 0.0, y: 0.0 }
             };
-
-            let new_dir = new_dir + wind;
 
             Dot {
                 pos: pos,
@@ -139,7 +137,7 @@ extern "C" {
 #[wasm_bindgen]
 impl Universe {
     fn handle_events(&mut self) {
-        let interpolate = |min: f32, max: f32, factor: f32| (min) + (max - min) * factor;
+        let interpolate = |min: f32, max: f32, factor: f32| (min) + (max - min) * factor.powi(2);
 
         match self.pending_events.pop() {
             Some(event) => {
@@ -167,8 +165,8 @@ impl Universe {
     }
 
     pub fn render_image_data(&mut self) {
-        for x in 0..self.image_data.len() {
-            self.image_data[x] = 0;
+        for x in (0..self.image_data.len()).step_by(4) {
+            self.image_data[x + 3] = 0;
         }
 
         let width = self.width() as usize;
