@@ -132,7 +132,7 @@ impl Dot {
     }
 }
 
-struct MouseEvent {
+struct ForceEvent {
     position: Vec2d,
     radius: f32,
 }
@@ -142,7 +142,7 @@ pub struct Universe {
     width: u32,
     height: u32,
     dots: Vec<Dot>,
-    pending_events: Vec<MouseEvent>,
+    pending_events: Vec<ForceEvent>,
     image_data: Vec<u8>,
 }
 
@@ -232,14 +232,14 @@ impl Universe {
 
         let only_dead = |dot : &&Dot| !only_alive(dot);
 
-        let mut new_events : Vec<MouseEvent> = self
+        let new_events : Vec<ForceEvent> = self
             .dots
             .iter()
             .filter(only_dead)
-            .map(|dot| MouseEvent {position: dot.pos, radius: 10.0})
+            .map(|dot| ForceEvent {position: dot.pos, radius: 10.0})
             .collect();
 
-        self.pending_events.append(&mut new_events);
+        self.pending_events.extend(new_events);
 
         let new_dots: Vec<Dot> = self
             .dots
@@ -273,7 +273,7 @@ impl Universe {
             });
         }
 
-        let pending_events: Vec<MouseEvent> = Vec::new();
+        let pending_events: Vec<ForceEvent> = Vec::new();
 
         let image_data = vec![0; width as usize * height as usize * 4];
 
@@ -295,7 +295,7 @@ impl Universe {
     }
 
     pub fn add_event(&mut self, x: f32, y: f32, radius: f32) {
-        self.pending_events.push(MouseEvent {
+        self.pending_events.push(ForceEvent {
             position: Vec2d { x, y },
             radius,
         })
