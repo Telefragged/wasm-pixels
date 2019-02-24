@@ -205,7 +205,7 @@ impl Universe {
 
                     let grid_indices = self.get_all_grid_indices(top_left, bottom_right);
 
-                    let mut dot_indices: Vec<usize> = grid_indices.iter().map(|index| self.grid_cells[index.clone()].clone()).flatten().collect();
+                    let dot_indices: Vec<usize> = grid_indices.iter().map(|index| self.grid_cells[index.clone()].clone()).flatten().collect();
 
                     for index in dot_indices {
                         let dot = self.dots[index];
