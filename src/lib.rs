@@ -258,17 +258,15 @@ impl Universe {
             let first_index = get_red_index(dot.pos.x as usize, dot.pos.y as usize);
 
             let interpolate = |min: f32, max: f32, factor: f32| min + (max - min) * (1.0 - factor).max(0.0).min(1.0);
+            
+            let red = match dot.state {
+                State::Detonating(t, max_t) => interpolate(0.0, 255.0, t / max_t) as u8,
+                _ => 0
+            };
 
-            if first_index <= self.image_data.len() {
-                let red = match dot.state {
-                    State::Detonating(t, max_t) => interpolate(0.0, 255.0, t / max_t) as u8,
-                    _ => 0
-                };
+            self.image_data[first_index] = red;
 
-                self.image_data[first_index] = red;
-
-                self.image_data[first_index + 3] = 255;
-            }
+            self.image_data[first_index + 3] = 255;
         }
     }
 
@@ -328,8 +326,8 @@ impl Universe {
         let mut dots = Vec::with_capacity(num_dots);
 
         let random_vec = || Vec2d {
-            x: random_f32() * width as f32,
-            y: random_f32() * height as f32,
+            x: random_f32() * (width - 1) as f32,
+            y: random_f32() * (height - 1) as f32,
         };
 
         for i in 0..num_dots {
