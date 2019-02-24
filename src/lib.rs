@@ -11,7 +11,7 @@ const EXPLOSION_RADIUS: f32 = 10.0;
 
 const GRID_SIZE: usize = 10;
 
-const MAX_EVENTS_PER_TICK: usize = 100;
+const MAX_EVENTS_PER_TICK: usize = 50;
 
 #[derive(Copy, Clone)]
 struct Vec2d {
@@ -194,53 +194,53 @@ impl Universe {
         ret
     }
 
-    fn handle_events(&mut self, depth: usize) {
+    fn handle_events(&mut self, max_events: usize) {
         let interpolate = |min: f32, max: f32, factor: f32| min + (max - min) * factor.powi(2);
 
-        match (self.pending_events.pop(), depth < MAX_EVENTS_PER_TICK) {
-            (Some(event), true) => {
-                let top_left = Vec2d {x: event.position.x - event.radius, y: event.position.y - event.radius };
-                let bottom_right = Vec2d {x: event.position.x + event.radius, y: event.position.y + event.radius };
+        for _ in 0..max_events {
+            match self.pending_events.pop() {
+                Some(event) => {
+                    let top_left = Vec2d {x: event.position.x - event.radius, y: event.position.y - event.radius };
+                    let bottom_right = Vec2d {x: event.position.x + event.radius, y: event.position.y + event.radius };
 
-                let grid_indices = self.get_all_grid_indices(top_left, bottom_right);
+                    let grid_indices = self.get_all_grid_indices(top_left, bottom_right);
 
-                let mut dot_indices: Vec<usize> = grid_indices.iter().map(|index| self.grid_cells[index.clone()].clone()).flatten().collect();
+                    let mut dot_indices: Vec<usize> = grid_indices.iter().map(|index| self.grid_cells[index.clone()].clone()).flatten().collect();
 
-                for index in dot_indices {
-                    let dot = self.dots[index];
+                    for index in dot_indices {
+                        let dot = self.dots[index];
 
-                    if (dot.pos.x - event.position.x).abs() > event.radius && (dot.pos.y - event.position.y).abs() > event.radius {
-                        continue;
-                    }
+                        if (dot.pos.x - event.position.x).abs() > event.radius && (dot.pos.y - event.position.y).abs() > event.radius {
+                            continue;
+                        }
 
-                    let dir = (dot.pos - event.position).normalized();
-                    let dist = (dot.pos - event.position).length();
+                        let dir = (dot.pos - event.position).normalized();
+                        let dist = (dot.pos - event.position).length();
 
-                    if dist >= event.radius {
-                        continue;
-                    } else {
-                        let new_state = match dot.state {
-                            State::Idle => {
-                                let time_until_detonation = random_f32() * (MAX_DETONATE_TIME - MIN_DETONATE_TIME) + MIN_DETONATE_TIME;
-                                State::Detonating( time_until_detonation, time_until_detonation)
-                            },
-                            State::Detonating(t, max_t) => State::Detonating(t, max_t)
-                        };
+                        if dist >= event.radius {
+                            continue;
+                        } else {
+                            let new_state = match dot.state {
+                                State::Idle => {
+                                    let time_until_detonation = random_f32() * (MAX_DETONATE_TIME - MIN_DETONATE_TIME) + MIN_DETONATE_TIME;
+                                    State::Detonating( time_until_detonation, time_until_detonation)
+                                },
+                                State::Detonating(t, max_t) => State::Detonating(t, max_t)
+                            };
 
-                        let dot = Dot {
-                            pos: dot.pos,
-                            dir: dot.dir
-                                + (dir * interpolate(0.0, 50.0, 1.0 - dist / event.radius)),
-                            state: new_state
-                        };
+                            let dot = Dot {
+                                pos: dot.pos,
+                                dir: dot.dir
+                                    + (dir * interpolate(0.0, 50.0, 1.0 - dist / event.radius)),
+                                state: new_state
+                            };
 
-                        self.dots[index] = dot;
+                            self.dots[index] = dot;
+                        }
                     }
                 }
-
-                self.handle_events(depth + 1)
+                _ => return
             }
-            _ => ()
         }
     }
 
@@ -311,7 +311,7 @@ impl Universe {
             self.grid_cells[index].push(i);
         }
 
-        self.handle_events(0);
+        self.handle_events(MAX_EVENTS_PER_TICK);
     }
 
     pub fn new(width: u32, height: u32, num_dots: usize) -> Universe {
