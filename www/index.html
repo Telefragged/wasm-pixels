@@ -16,14 +16,20 @@
             align-items: center;
             justify-content: center;
         }
+
+        #fps {
+            white-space: pre;
+            font-family: monospace;
+        }
     </style>
 </head>
 
 <body>
+    <div id="fps"></div>
     <p id="remaining-dots"></p>
     <canvas id="game-canvas"></canvas>
     <script src="./bootstrap.js"></script>
-    <input type="number" step=1000 id="number-of-dots-input"/>
+    <input type="number" step=1000 id="number-of-dots-input" />
     <button id="reset-game-button">Reset</button>
 </body>
 
