@@ -73,14 +73,14 @@ impl Mul<f32> for Vec2d {
 #[derive(Clone, Copy)]
 enum State {
     Idle,
-    Detonating(f32, f32)
+    Detonating(f32, f32),
 }
 
 #[derive(Clone, Copy)]
 struct Dot {
     pos: Vec2d,
     dir: Vec2d,
-    state: State
+    state: State,
 }
 
 impl Dot {
@@ -89,14 +89,14 @@ impl Dot {
 
         let new_state = match self.state {
             State::Idle => State::Idle,
-            State::Detonating(t, max_t) => State::Detonating(t - time_delta, max_t)
+            State::Detonating(t, max_t) => State::Detonating(t - time_delta, max_t),
         };
 
         if length == 0.0 {
             Dot {
                 pos: self.pos,
                 dir: self.dir,
-                state: new_state
+                state: new_state,
             }
         } else {
             let mut pos = self.pos + (self.dir * time_delta);
@@ -130,7 +130,7 @@ impl Dot {
             Dot {
                 pos: pos,
                 dir: new_dir,
-                state: new_state
+                state: new_state,
             }
         }
     }
@@ -151,7 +151,7 @@ pub struct Universe {
     grid_width: usize,
     grid_height: usize,
     grid_columns: usize,
-    grid_cells: Vec<Vec<usize>>
+    grid_cells: Vec<Vec<usize>>,
 }
 
 fn random_f32() -> f32 {
@@ -200,17 +200,29 @@ impl Universe {
         for _ in 0..max_events {
             match self.pending_events.pop() {
                 Some(event) => {
-                    let top_left = Vec2d {x: event.position.x - event.radius, y: event.position.y - event.radius };
-                    let bottom_right = Vec2d {x: event.position.x + event.radius, y: event.position.y + event.radius };
+                    let top_left = Vec2d {
+                        x: event.position.x - event.radius,
+                        y: event.position.y - event.radius,
+                    };
+                    let bottom_right = Vec2d {
+                        x: event.position.x + event.radius,
+                        y: event.position.y + event.radius,
+                    };
 
                     let grid_indices = self.get_all_grid_indices(top_left, bottom_right);
 
-                    let dot_indices: Vec<usize> = grid_indices.iter().map(|index| self.grid_cells[index.clone()].clone()).flatten().collect();
+                    let dot_indices: Vec<usize> = grid_indices
+                        .iter()
+                        .map(|index| self.grid_cells[index.clone()].clone())
+                        .flatten()
+                        .collect();
 
                     for index in dot_indices {
                         let dot = self.dots[index];
 
-                        if (dot.pos.x - event.position.x).abs() > event.radius && (dot.pos.y - event.position.y).abs() > event.radius {
+                        if (dot.pos.x - event.position.x).abs() > event.radius
+                            && (dot.pos.y - event.position.y).abs() > event.radius
+                        {
                             continue;
                         }
 
@@ -222,24 +234,26 @@ impl Universe {
                         } else {
                             let new_state = match dot.state {
                                 State::Idle => {
-                                    let time_until_detonation = random_f32() * (MAX_DETONATE_TIME - MIN_DETONATE_TIME) + MIN_DETONATE_TIME;
-                                    State::Detonating( time_until_detonation, time_until_detonation)
-                                },
-                                State::Detonating(t, max_t) => State::Detonating(t, max_t)
+                                    let time_until_detonation = random_f32()
+                                        * (MAX_DETONATE_TIME - MIN_DETONATE_TIME)
+                                        + MIN_DETONATE_TIME;
+                                    State::Detonating(time_until_detonation, time_until_detonation)
+                                }
+                                State::Detonating(t, max_t) => State::Detonating(t, max_t),
                             };
 
                             let dot = Dot {
                                 pos: dot.pos,
                                 dir: dot.dir
                                     + (dir * interpolate(0.0, 50.0, 1.0 - dist / event.radius)),
-                                state: new_state
+                                state: new_state,
                             };
 
                             self.dots[index] = dot;
                         }
                     }
                 }
-                _ => return
+                _ => return,
             }
         }
     }
@@ -257,11 +271,13 @@ impl Universe {
         for dot in &self.dots {
             let first_index = get_red_index(dot.pos.x as usize, dot.pos.y as usize);
 
-            let interpolate = |min: f32, max: f32, factor: f32| min + (max - min) * (1.0 - factor).max(0.0).min(1.0);
-            
+            let interpolate = |min: f32, max: f32, factor: f32| {
+                min + (max - min) * (1.0 - factor).max(0.0).min(1.0)
+            };
+
             let red = match dot.state {
                 State::Detonating(t, max_t) => interpolate(0.0, 255.0, t / max_t) as u8,
-                _ => 0
+                _ => 0,
             };
 
             self.image_data[first_index] = red;
@@ -271,21 +287,21 @@ impl Universe {
     }
 
     pub fn tick(&mut self, time_delta: f32) {
-
-        let only_alive = |dot : &&Dot| {
-            match dot.state {
-                State::Detonating(t, _) => t > 0.0,
-                _ => true
-            }
+        let only_alive = |dot: &&Dot| match dot.state {
+            State::Detonating(t, _) => t > 0.0,
+            _ => true,
         };
 
-        let only_dead = |dot : &&Dot| !only_alive(dot);
+        let only_dead = |dot: &&Dot| !only_alive(dot);
 
-        let new_events : Vec<ForceEvent> = self
+        let new_events: Vec<ForceEvent> = self
             .dots
             .iter()
             .filter(only_dead)
-            .map(|dot| ForceEvent {position: dot.pos, radius: EXPLOSION_RADIUS})
+            .map(|dot| ForceEvent {
+                position: dot.pos,
+                radius: EXPLOSION_RADIUS,
+            })
             .collect();
 
         self.pending_events.extend(new_events);
@@ -321,7 +337,8 @@ impl Universe {
         let grid_width: usize = GRID_SIZE as usize;
         let grid_height: usize = GRID_SIZE as usize;
 
-        let mut grid_cells: Vec<Vec<usize>> = vec![Vec::with_capacity((num_dots as usize / num_grids) * 2); num_grids];
+        let mut grid_cells: Vec<Vec<usize>> =
+            vec![Vec::with_capacity((num_dots as usize / num_grids) * 2); num_grids];
 
         let mut dots = Vec::with_capacity(num_dots);
 
@@ -333,11 +350,11 @@ impl Universe {
         for i in 0..num_dots {
             let pos = random_vec();
 
-            let dir = Vec2d {x: 0.0, y: 0.0};
+            let dir = Vec2d { x: 0.0, y: 0.0 };
             dots.push(Dot {
                 pos: pos,
                 dir: dir,
-                state: State::Idle
+                state: State::Idle,
             });
 
             let column = pos.x as usize / grid_width;
@@ -361,7 +378,7 @@ impl Universe {
             grid_width,
             grid_height,
             grid_columns,
-            grid_cells
+            grid_cells,
         }
     }
 
